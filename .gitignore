@@ -1,3 +1,9 @@
+# Data folders
+output/
+data/processed/*
+data/raw/digital-exclusion/
+data/raw/population/
+
 # History files
 .Rhistory
 .Rapp.history
@@ -37,3 +43,4 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+.Rproj.user
