@@ -1,4 +1,4 @@
-# Produce British Red Cross strategic risk maps and data for the UK
+# Produce British Red Cross strategic risk maps for the UK
 For disasters/emergencies, health inequalities, and displacement/migration. The [guide to risk maps](guide-to-risk-maps.pptx) contains more information about data definitions and sources, and how risks are aggregated into different geographies.
 
 After cloning/forking/downloading this repo, install the following packages:
