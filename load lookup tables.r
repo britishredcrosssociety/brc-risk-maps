@@ -31,7 +31,7 @@ load_lookup_dz_iz_lad = function(url = "https://www2.gov.scot/Resource/0053/0053
 }
 
 ##
-## Norther Ireland
+## Northern Ireland
 ##
 # Small Areas (2011) to SOAs to Local Government Districts (December 2018) Lookup with Area Classifications in Northern Ireland
 # source: https://geoportal.statistics.gov.uk/datasets/small-areas-2011-to-soas-to-local-government-districts-december-2018-lookup-with-area-classifications-in-northern-ireland
