@@ -2,6 +2,7 @@
 ## Prep data on people seeking asylum who receive Section 95 support
 ##
 ## Using Home Office stats: https://www.gov.uk/government/statistical-data-sets/asylum-and-resettlement-datasets
+## - December 2019
 ##
 library(tidyverse)
 library(readxl)
@@ -17,7 +18,7 @@ lads = load_lads(2019)
 ##
 # download the latest stats on Section 95 support by local authority
 # note: you'll need to manually update this URL whenever the Home Office releases new statistics
-GET("https://assets.publishing.service.gov.uk/government/uploads/system/uploads/attachment_data/file/848266/section-95-support-local-authority-datasets-sep-2019.xlsx",
+GET("https://assets.publishing.service.gov.uk/government/uploads/system/uploads/attachment_data/file/868203/section-95-support-local-authority-datasets-dec-2019.xlsx",
     write_disk(tf <- tempfile(fileext = ".xlsx")))
 
 dispersal_raw = read_excel(tf, sheet = "Data - Asy_D11")  # check the sheet name is still valid if you're updating the URL above
