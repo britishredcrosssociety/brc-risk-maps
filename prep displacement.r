@@ -44,3 +44,10 @@ lads = lads %>%
 lads %>% 
   select(LAD19CD, `Dispersed Accommodation`, `Subsistence Only`, Sec95) %>% 
   write_csv(file.path(data.dir.processed, "UK - LAD - displacement.csv"))
+
+
+##
+## DEBUG - sometimes the official ONS LAD codes don't match up with what the Home Office provides... check this
+##
+# any LAD codes in `dispersal` that aren't in `lads`?
+# dplyr::setdiff(dispersal$lad19cd, lads$LAD19CD)  # using Dec 2019 asylum stats, it seems not.
