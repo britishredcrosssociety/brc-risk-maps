@@ -120,9 +120,12 @@ fires_eng_lsoa = fires_eng_lsoa %>%
   mutate(lsoa11cd = ifelse(is_code, LSOA_DESCRIPTION, LSOA_CODE)) %>% 
   select(-is_code)
 
+eng_dwellings = c("Primary fire - dwelling", "Primary fire - dwelling or other building", "Primary fire - other buildings - Student Hall of Residence",
+                  "Primary fire - other buildings - Other Residential Home")
+
 # count the number of incidents in each LSOA 
 fires_eng_lsoa_sum = fires_eng_lsoa %>% 
-  filter(FINANCIAL_YEAR == fin_year & INCIDENT_TYPE == "Primary fire - dwelling or other building") %>% 
+  filter(FINANCIAL_YEAR == fin_year & INCIDENT_TYPE %in% eng_dwellings) %>% 
   count(lsoa11cd) %>% 
   rename(n_fires = n)
 
