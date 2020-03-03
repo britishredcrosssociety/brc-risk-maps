@@ -267,8 +267,8 @@ eng_lad_risk = eng_msoa_risk %>%
             worst_imd_q    = min(imd_q),
             
             # calculate highest/worst risks in each LAD
-            worst_fires  = max(dens_fires, na.rm = T),
-            worst_floods = max(n_people_flood, na.rm = T),
+            worst_fires  = ifelse(all(is.na(dens_fires)), NA, max(dens_fires, na.rm = T)),  # only calculate max. if not all MSOAs contain NA
+            worst_floods = ifelse(all(is.na(n_people_flood)), NA, max(n_people_flood, na.rm = T)),  # only calculate max. if not all MSOAs contain NA
             worst_lonely = max(loneills_2018, na.rm = T),
             worst_health = min(Worst_Health_decile, na.rm = T),
             worst_alone  = (sum(n_one_person_hh, na.rm = T) + sum(n_lone_parents, na.rm = T)) / sum(n_people_total, na.rm = T),  # proportion of people living alone in whole LAD
@@ -538,7 +538,7 @@ wal_lad_risk = wal_msoa_risk %>%
             worst_imd_q    = min(imd_q),
             
             # calculate highest/worst risks in each LAD
-            worst_floods = max(n_people_flood, na.rm = T),
+            worst_floods = ifelse(all(is.na(n_people_flood)), NA, max(n_people_flood, na.rm = T)),  # only calculate max. if not all MSOAs contain NA
             worst_lonely = max(loneills_2018, na.rm = T),
             worst_health = min(Worst_Health_decile, na.rm = T),
             worst_alone  = (sum(n_one_person_hh, na.rm = T) + sum(n_lone_parents, na.rm = T)) / sum(n_people_total, na.rm = T),  # proportion of people living alone in whole LAD
@@ -851,7 +851,7 @@ sco_lad_risk = sco_msoa_risk %>%
             worst_imd_q    = min(imd_q),
             
             # calculate highest/worst risks in each LAD
-            worst_fires  = max(dens_fires, na.rm = T),
+            worst_fires  = ifelse(all(is.na(dens_fires)), NA, max(dens_fires, na.rm = T)),  # only calculate max. if not all MSOAs contain NA
             worst_lonely = max(loneills_2018, na.rm = T),
             worst_health = min(Worst_Health_decile, na.rm = T),
             worst_alone  = (sum(n_one_person_hh, na.rm = T) + sum(n_lone_parents, na.rm = T)) / sum(n_people_total, na.rm = T),  # proportion of people living alone in whole LAD
@@ -1090,7 +1090,7 @@ ni_lad_risk = ni_lsoa_risk %>%
             worst_imd_q    = min(imd_q),
             
             # calculate highest/worst risks in each LAD
-            worst_floods = max(n_people_flood, na.rm = T),
+            worst_floods = ifelse(all(is.na(n_people_flood)), NA, max(n_people_flood, na.rm = T)),  # only calculate max. if not all MSOAs contain NA
             worst_lonely = max(loneills_2018, na.rm = T),
             worst_health = min(Health_decile, na.rm = T),
             worst_alone  = (sum(n_one_person_hh, na.rm = T) + sum(n_lone_parents, na.rm = T)) / sum(n_people_total, na.rm = T),  # proportion of people living alone in whole LAD
