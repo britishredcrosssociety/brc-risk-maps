@@ -87,6 +87,8 @@ uk_lsoa_imd = read_csv("https://github.com/matthewgthomas/IMD/raw/master/data/UK
 uk_msoa_alone = read_csv(file.path(data.dir.processed, "UK - Household composition - People - MSOA.csv")) %>%  # from `prep living alone.r`
   rename(msoa11cd = `geography code`)
 
+lad_codes = read_csv(file.path(data.dir.in, "LAD 2017 to LAD 2019 codes.csv"))
+
 
 #################################################################################################################
 ## England
@@ -263,6 +265,14 @@ eng_lad_risk = eng_msoa_risk %>%
             worst_health_q = min(health_q),
             worst_alone_q  = min(alone_q),
             worst_imd_q    = min(imd_q),
+            
+            # calculate highest/worst risks in each LAD
+            worst_fires  = max(dens_fires, na.rm = T),
+            worst_floods = max(n_people_flood, na.rm = T),
+            worst_lonely = max(loneills_2018, na.rm = T),
+            worst_health = min(Worst_Health_decile, na.rm = T),
+            worst_alone  = (sum(n_one_person_hh, na.rm = T) + sum(n_lone_parents, na.rm = T)) / sum(n_people_total, na.rm = T),  # proportion of people living alone in whole LAD
+            worst_imd    = min(Worst_IMD_decile, na.rm = T),
             
             # calculate averages (medians) for each risk in each LAD
             median_fires  = median(dens_fires, na.rm = T),
@@ -524,6 +534,13 @@ wal_lad_risk = wal_msoa_risk %>%
             worst_health_q = min(health_q),
             worst_alone_q  = min(alone_q),
             worst_imd_q    = min(imd_q),
+            
+            # calculate highest/worst risks in each LAD
+            worst_floods = max(n_people_flood, na.rm = T),
+            worst_lonely = max(loneills_2018, na.rm = T),
+            worst_health = min(Worst_Health_decile, na.rm = T),
+            worst_alone  = (sum(n_one_person_hh, na.rm = T) + sum(n_lone_parents, na.rm = T)) / sum(n_people_total, na.rm = T),  # proportion of people living alone in whole LAD
+            worst_imd    = min(Worst_IMD_decile, na.rm = T),
             
             # calculate averages (medians) for each risk in each LAD
             median_floods = median(n_people_flood, na.rm = T),
@@ -829,6 +846,13 @@ sco_lad_risk = sco_msoa_risk %>%
             worst_alone_q  = min(alone_q),
             worst_imd_q    = min(imd_q),
             
+            # calculate highest/worst risks in each LAD
+            worst_fires  = max(dens_fires, na.rm = T),
+            worst_lonely = max(loneills_2018, na.rm = T),
+            worst_health = min(Worst_Health_decile, na.rm = T),
+            worst_alone  = (sum(n_one_person_hh, na.rm = T) + sum(n_lone_parents, na.rm = T)) / sum(n_people_total, na.rm = T),  # proportion of people living alone in whole LAD
+            worst_imd    = min(Worst_IMD_decile, na.rm = T),
+            
             # calculate averages (medians) for each risk in each LAD
             median_fires  = median(dens_fires, na.rm = T),
             median_lonely = median(loneills_2018, na.rm = T),
@@ -1058,6 +1082,13 @@ ni_lad_risk = ni_lsoa_risk %>%
             worst_health_q = min(health_q),
             worst_alone_q  = min(alone_q),
             worst_imd_q    = min(imd_q),
+            
+            # calculate highest/worst risks in each LAD
+            worst_floods = max(n_people_flood, na.rm = T),
+            worst_lonely = max(loneills_2018, na.rm = T),
+            worst_health = min(Worst_Health_decile, na.rm = T),
+            worst_alone  = (sum(n_one_person_hh, na.rm = T) + sum(n_lone_parents, na.rm = T)) / sum(n_people_total, na.rm = T),  # proportion of people living alone in whole LAD
+            worst_imd    = min(Worst_IMD_decile, na.rm = T),
             
             # calculate averages (medians) for each risk in each LAD
             median_floods = median(n_people_flood, na.rm = T),
