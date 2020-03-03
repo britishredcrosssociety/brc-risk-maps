@@ -4,7 +4,7 @@ For disasters/emergencies, health inequalities, and displacement/migration. The 
 After cloning/forking/downloading this repo, install the following packages:
 
 ```
-install.packages(
+install.packages(c(
   # for loading/wrangling data
   "tidyverse",
   "lubridate",
@@ -22,7 +22,7 @@ install.packages(
 
   # misc.
   "devtools"
-)
+))
 ```
 
 You'll also need to install my [BRC data science library](https://github.com/matthewgthomas/brclib):
