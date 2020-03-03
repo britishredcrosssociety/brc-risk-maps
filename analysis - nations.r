@@ -266,7 +266,7 @@ ruc_ni_lad = ruc_ni %>%
 # stitch these into a UK-wide dataframe
 ruc_uk_lad = bind_rows(ruc_eng_lad, ruc_wal_lad, ruc_sco_lad, ruc_ni_lad)
 
-# get categories
+# get categories (to write as a note on Power BI dashboard)
 unique(ruc_eng_lad$Prop_Urban_q_name)
 unique(ruc_wal_lad$Prop_Urban_q_name)
 unique(ruc_sco_lad$Prop_Urban_q_name)
@@ -281,19 +281,26 @@ unique(ruc_ni_lad$Prop_Urban_q_name)
 ## Local Authority-level = HLE, Asylum support, migrant destitution, digital exclusion
 ##
 risk_uk_lad = bind_rows(
-  risk_eng_lad %>% select(LAD17CD, Sec95, destitution_migrant, HLE_birth, digital_total_mult, destitution_all), # %>% mutate(Country = "England"), 
-  risk_wal_lad %>% select(LAD17CD, Sec95, destitution_migrant, HLE_birth, digital_total_mult, destitution_all), # %>% mutate(Country = "Wales"), 
-  risk_sco_lad %>% select(LAD17CD, Sec95, destitution_migrant, HLE_birth, digital_total_mult, destitution_all), # %>% mutate(Country = "Scotland"), 
-  risk_ni_lad  %>% select(LAD17CD = LAD18CD, Sec95, HLE_birth, digital_total_mult) # %>% mutate(Country = "Northern Ireland")
-) %>% 
+  risk_eng_lad %>% select(LAD17CD, Sec95, destitution_migrant, HLE_birth, digital_total_mult, destitution_all,  # LAD-level risks
+                          worst_fires, worst_floods, worst_lonely, worst_alone),  # MSOA-level risks
+  
+  risk_wal_lad %>% select(LAD17CD, Sec95, destitution_migrant, HLE_birth, digital_total_mult, destitution_all,  # LAD-level risks
+                          worst_floods, worst_lonely, worst_alone),  # MSOA-level risks
+  
+  risk_sco_lad %>% select(LAD17CD, Sec95, destitution_migrant, HLE_birth, digital_total_mult, destitution_all,  # LAD-level risks
+                          worst_fires, worst_lonely, worst_alone),  # MSOA-level risks
+  
+  risk_ni_lad  %>% select(LAD17CD = LAD18CD, Sec95, HLE_birth, digital_total_mult,  # LAD-level risks
+                          worst_floods, worst_lonely, worst_alone)  # MSOA-level risks
+)
   
   # make friendly indicator names
-  rename(`Asylum seekers receiving support` = Sec95,
-         `Migrant destitution` = destitution_migrant,
-         `Healthy life expectancy` = HLE_birth,
-         `Digital exclusion` = digital_total_mult,
-         Destitution = destitution_all
-         )
+  # rename(`Asylum seekers receiving support` = Sec95,
+  #        `Migrant destitution` = destitution_migrant,
+  #        `Healthy life expectancy` = HLE_birth,
+  #        `Digital exclusion` = digital_total_mult,
+  #        Destitution = destitution_all
+  #        )
 
 # risk_uk_lad %>% 
 #   filter(Country == "England") %>% 
@@ -306,14 +313,31 @@ sum_uk_lad = risk_uk_lad %>%
   
   select(-Other, -Top10, -Prop_top10_q_name) %>% 
   
-  pivot_longer(cols = `Asylum seekers receiving support`:Destitution, names_to = "Indicator", values_to = "Indicator Value") %>% 
-  
   rename(Deprivation = Prop_top10_q, `Rural-urban classification` = Prop_Urban_q) %>% 
   pivot_longer(cols = c(Deprivation, `Rural-urban classification`), names_to = "Domain", values_to = "Domain Value") %>% 
-
-  # mutate(Domain = "Deprivation") %>%  # track which domain this is
-
-  select(Country, LAD17CD, Domain, `Domain Value`, Prop_top10, Prop_Urban, Indicator, `Indicator Value`) %>% 
+  
+  # summarise each indicator within countries and domains (most need to report the max. value, but...
+  # ... Health Life Expectancy should report min. (i.e. lowest HLE))
+  group_by(Country, Domain, `Domain Value`) %>% 
+  summarise(
+    # LAD-level indicators
+    `Asylum seekers receiving support` = max(Sec95, na.rm = T),
+    `Migrant destitution` = max(destitution_migrant, na.rm = T),
+    `Healthy life expectancy` = min(HLE_birth, na.rm = T),
+    `Digital exclusion` = max(digital_total_mult, na.rm = T),
+    Destitution = max(destitution_all, na.rm = T),
+    
+    # already-summarised MSOA-level indicators
+    `Dwelling fires` = max(worst_fires, na.rm = T),
+    `Flooding` = max(worst_floods, na.rm = T),
+    `Loneliness` = max(worst_lonely, na.rm = T),
+    `Living alone` = max(worst_alone, na.rm = T)
+  ) %>% 
+  ungroup() %>% 
+  
+  pivot_longer(cols = `Asylum seekers receiving support`:`Living alone`, names_to = "Indicator", values_to = "Indicator Value") %>% 
+  
+  # select(Country, LAD17CD, Domain, `Domain Value`, Prop_top10, Prop_Urban, Indicator, `Indicator Value`) %>% 
   arrange(Country, Domain, `Domain Value`)
 
 ##
@@ -377,3 +401,8 @@ sum_uk_lad %>%
   distinct() %>% 
   arrange(Indicator) %>% 
   write_csv(file.path(data.dir.out, "Risks - nations - indicators.csv"))
+
+
+###############################################################################
+## Prepare LAD-level data for stats analysis
+##
