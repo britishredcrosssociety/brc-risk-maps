@@ -282,8 +282,10 @@ eng_lad_risk = eng_msoa_risk %>%
             median_alone  = median(prop_alone, na.rm = T),
             median_imd    = median(Worst_IMD_decile, na.rm = T)) %>% 
   
+  left_join(lad_codes, by = "LAD17CD") %>%   # get LAD 2019 codes
+  
   # merge displacement and digital exclusion
-  left_join(eng_lad_displacement, by = c("LAD17CD" = "LAD19CD")) %>%  # POTENTIAL BUG! There's no way to map Local Authority codes from 2017 to codes in 2019 (because some LAs might have changed / no longer exist) - so there could be some data missing here
+  left_join(eng_lad_displacement, by = "LAD19CD") %>%
   left_join(eng_lad_digital, by = c("LAD17CD" = "lad17cd")) %>% 
   left_join(eng_lad_hle, by = c("LAD17CD" = "lad17cd")) %>% 
   left_join(eng_lad_destitution, by = c("LAD17CD" = "lad17cd"))
@@ -549,8 +551,10 @@ wal_lad_risk = wal_msoa_risk %>%
             median_alone  = median(prop_alone, na.rm = T),
             median_imd    = median(Worst_IMD_decile, na.rm = T)) %>% 
   
+  left_join(lad_codes, by = "LAD17CD") %>%   # get LAD 2019 codes
+  
   # merge displacement and digital exclusion
-  left_join(wal_lad_displacement, by = c("LAD17CD" = "LAD19CD")) %>%  # POTENTIAL BUG! There's no way to map Local Authority codes from 2017 to codes in 2019 (because some LAs might have changed / no longer exist) - so there could be some data missing here
+  left_join(wal_lad_displacement, by = "LAD19CD") %>%
   left_join(wal_lad_digital, by = c("LAD17CD" = "lad17cd")) %>% 
   left_join(wal_lad_hle, by = c("LAD17CD" = "lad17cd"))%>% 
   left_join(wal_lad_destitution, by = c("LAD17CD" = "lad17cd"))
@@ -860,8 +864,10 @@ sco_lad_risk = sco_msoa_risk %>%
             median_alone  = median(prop_alone, na.rm = T),
             median_imd    = median(Worst_IMD_decile, na.rm = T)) %>% 
   
+  left_join(lad_codes, by = "LAD17CD") %>%   # get LAD 2019 codes
+  
   # merge displacement and digital exclusion
-  left_join(sco_lad_displacement, by = c("LAD17CD" = "LAD19CD")) %>% 
+  left_join(sco_lad_displacement, by = "LAD19CD") %>% 
   left_join(sco_lad_digital, by = c("LAD17CD" = "lad17cd")) %>% 
   left_join(sco_lad_hle, by = c("LAD17CD" = "lad17cd")) %>% 
   left_join(sco_lad_destitution, by = c("LAD17CD" = "lad17cd"))
@@ -1086,9 +1092,9 @@ ni_lad_risk = ni_lsoa_risk %>%
             # calculate highest/worst risks in each LAD
             worst_floods = max(n_people_flood, na.rm = T),
             worst_lonely = max(loneills_2018, na.rm = T),
-            worst_health = min(Worst_Health_decile, na.rm = T),
+            worst_health = min(Health_decile, na.rm = T),
             worst_alone  = (sum(n_one_person_hh, na.rm = T) + sum(n_lone_parents, na.rm = T)) / sum(n_people_total, na.rm = T),  # proportion of people living alone in whole LAD
-            worst_imd    = min(Worst_IMD_decile, na.rm = T),
+            worst_imd    = min(IMD_decile, na.rm = T),
             
             # calculate averages (medians) for each risk in each LAD
             median_floods = median(n_people_flood, na.rm = T),
@@ -1096,6 +1102,8 @@ ni_lad_risk = ni_lsoa_risk %>%
             median_health = median(Health_decile, na.rm = T),
             median_alone  = median(prop_alone, na.rm = T),
             median_imd    = median(IMD_decile, na.rm = T)) %>% 
+  
+  left_join(lad_codes, by = c("LAD18CD" = "LAD17CD")) %>%   # get LAD 2019 codes
   
   # merge displacement and digital exclusion
   left_join(ni_lad_displacement, by = c("LAD18CD" = "LAD19CD")) %>% 
