@@ -11,6 +11,7 @@
 library(tidyverse)
 library(janitor)
 library(brclib)
+library(broom)
 
 source("init.r")
 source("load lookup tables.r")
@@ -307,17 +308,18 @@ risk_uk_lad = bind_rows(
 #   ggplot(aes(x = `Destitution`)) + geom_histogram()
 
 # convert to long format and tidy up data
-sum_uk_lad = risk_uk_lad %>% 
+uk_lad = risk_uk_lad %>% 
   left_join(imd_lad, by = "LAD17CD") %>%   # merge deprivation summary
   left_join(ruc_uk_lad, by = "LAD17CD") %>% 
   
   select(-Other, -Top10, -Prop_top10_q_name) %>% 
   
   rename(Deprivation = Prop_top10_q, `Rural-urban classification` = Prop_Urban_q) %>% 
-  pivot_longer(cols = c(Deprivation, `Rural-urban classification`), names_to = "Domain", values_to = "Domain Value") %>% 
-  
-  # summarise each indicator within countries and domains (most need to report the max. value, but...
-  # ... Health Life Expectancy should report min. (i.e. lowest HLE))
+  pivot_longer(cols = c(Deprivation, `Rural-urban classification`), names_to = "Domain", values_to = "Domain Value")
+
+# summarise each indicator within countries and domains (most need to report the max. value, but...
+# ... Health Life Expectancy should report min. (i.e. lowest HLE))
+sum_uk_lad = uk_lad %>% 
   group_by(Country, Domain, `Domain Value`) %>% 
   summarise(
     # LAD-level indicators
@@ -335,6 +337,7 @@ sum_uk_lad = risk_uk_lad %>%
   ) %>% 
   ungroup() %>% 
   
+  # pivot indicator columns into long format
   pivot_longer(cols = `Asylum seekers receiving support`:`Living alone`, names_to = "Indicator", values_to = "Indicator Value") %>% 
   
   # select(Country, LAD17CD, Domain, `Domain Value`, Prop_top10, Prop_Urban, Indicator, `Indicator Value`) %>% 
@@ -404,5 +407,134 @@ sum_uk_lad %>%
 
 
 ###############################################################################
-## Prepare LAD-level data for stats analysis
+## Analyse healthy life expectancy
 ##
+# deprivation
+uk_lad_dep = uk_lad %>% 
+  filter(Domain == "Deprivation")
+
+# HLE covars
+uk_lad_dep_hle = uk_lad %>% 
+  filter(Domain == "Deprivation") %>% 
+  select(Country, LAD17CD, Deprivation = `Domain Value`, Prop_top10, HLE_birth) %>% 
+  na.omit()
+
+# histograms of HLE by country
+uk_lad_dep_hle %>% 
+  ggplot(aes(x = HLE_birth, fill = Country)) +
+  geom_histogram(binwidth = 1) +
+  facet_wrap(~Country, scales = "free_y")
+
+##
+## how does healthy life expectancy differ between nations (on average; non-spatial)?
+##
+m_hle_country = lm(HLE_birth ~ Country, data = uk_lad_dep_hle)
+
+plot(m_hle_country)  # check residuals etc.
+glance(m_hle_country)  # look at model fit etc.
+
+tidy(m_hle_country, conf.int = T)
+
+# Bayesian models
+library(rstanarm)
+library(loo)
+
+m_hle_country = stan_glm(HLE_birth ~ Country, 
+                         data = uk_lad_dep_hle,
+                         prior_intercept = normal(0, 5), prior = normal(0, 5),
+                         adapt_delta = 0.99, chains = 4)
+
+mlm_hle_country = stan_lmer(HLE_birth ~ (1 | Country), 
+                            data = uk_lad_dep_hle,
+                            prior_intercept = normal(0, 5), prior = normal(0, 5),
+                            adapt_delta = 0.99, chains = 4)
+
+loo_m_hle = loo(m_hle_country)
+loo_mlm_hle = loo(mlm_hle_country)
+
+loo_compare(loo_m_hle, loo_mlm_hle)
+
+plot(mlm_hle_country)
+
+# plot model predictions
+post = posterior_predict(mlm_hle_country)
+pred = posterior_linpred(mlm_hle_country)
+
+quants = apply(post, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
+quants2 = apply(pred, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
+row.names(quants) = c("sim.lwr", "sim.med", "sim.upr")
+row.names(quants2) = c("lwr", "HLE_birth.pred", "upr")
+
+hle_pred = cbind(uk_lad_dep_hle, t(quants), t(quants2))
+
+ggplot(hle_pred, aes(x = Country, y = HLE_birth.pred, colour = Country)) +
+  geom_point(aes(y = HLE_birth), alpha = 0.2, shape = 4, #size = 2,
+             position = position_dodge(0.9), show.legend = F) +
+  
+  geom_point(position = position_dodge(0.9), size = 3) +
+  geom_linerange(aes(ymin=lwr, ymax=upr), position = position_dodge(0.9), lwd = 1.5) +
+  
+  labs(y = "HLE at birth", colour = NULL) +
+  
+  theme_classic()
+
+##
+## how does HLE differ between deprivation deciles and nations (non-spatial)?
+##
+m_hle_dep = lm(HLE_birth ~ Prop_top10 * Country, data = uk_lad_dep_hle)
+
+plot(m_hle_dep)  # check residuals etc.
+glance(m_hle_dep)  # look at model fit etc.
+
+tidy(m_hle_dep, conf.int = T)
+
+# Bayesian version
+m_hle_country_dep = stan_glm(HLE_birth ~ Prop_top10 * Country, 
+                             data = uk_lad_dep_hle,
+                             prior_intercept = normal(0, 5), prior = normal(0, 5),
+                             adapt_delta = 0.99, chains = 4)
+
+mlm_hle_country_dep = stan_lmer(HLE_birth ~ (Prop_top10 | Country), 
+                                data = uk_lad_dep_hle,
+                                prior_intercept = normal(0, 5), prior = normal(0, 5),
+                                adapt_delta = 0.99, chains = 4)
+
+loo_m_hle = loo(m_hle_country_dep)
+loo_mlm_hle = loo(mlm_hle_country_dep)
+
+loo_compare(loo_m_hle, loo_mlm_hle)
+
+plot(m_hle_country_dep)
+
+# plot model predictions for proportion of deprivation and country on HLE
+new.data = expand_grid(
+  Country = unique(uk_lad_dep_hle$Country),
+  Prop_top10 = seq(0, 1, by = 0.01)
+)
+
+post = posterior_predict(m_hle_country_dep, newdata = new.data)
+pred = posterior_linpred(m_hle_country_dep, newdata = new.data)
+
+quants = apply(post, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
+quants2 = apply(pred, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
+row.names(quants) = c("sim.lwr", "sim.med", "sim.upr")
+row.names(quants2) = c("lwr", "HLE_birth.pred", "upr")
+
+new.data = cbind(new.data, t(quants), t(quants2))
+
+ggplot(new.data, aes(x = Prop_top10, y = HLE_birth.pred)) +
+  geom_point(data = uk_lad_dep_hle, aes(y = HLE_birth), alpha = 0.2) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr, fill = Country), alpha = 0.4, show.legend = F) +
+  geom_line(aes(colour = Country), lwd = 1.5, show.legend = F) +
+  
+  facet_wrap(~Country) +
+  
+  scale_color_brewer(palette = "Accent") +
+  scale_fill_brewer(palette = "Accent") +
+  scale_x_continuous(labels = scales::percent) +
+  scale_y_continuous(breaks = seq(40, 70, by = 5)) +
+  
+  labs(y = "Healthy life expectancy at birth (years)\n", x = "\nProportion of highly deprived neighbourhoods") +
+  theme_classic()
+
+ggsave("plots/nations/hle.png", width = 175, height = 150, units = "mm")
