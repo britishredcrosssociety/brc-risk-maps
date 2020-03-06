@@ -11,7 +11,11 @@
 library(tidyverse)
 library(janitor)
 library(brclib)
+
+# for stats models
 library(broom)
+library(rstanarm)
+library(loo)
 
 source("init.r")
 source("load lookup tables.r")
@@ -93,6 +97,9 @@ imd_msoa = imd_lsoa %>%
   select(LSOA, IMD_decile) %>% 
   left_join(lookup_uk_lsoa_msoa, by = c("LSOA" = "LSOA11CD")) %>% 
   
+  # add Northern Ireland's LSOAs as if they're MSOAs
+  bind_rows(imd_lsoa %>% filter(startsWith(LSOA, "9")) %>% mutate(MSOA11CD = LSOA)) %>% 
+  
   # label deciles by whether they're in top 10 then summarise by this label
   mutate(IMD_top10 = ifelse(IMD_decile <= 2, "Top10", "Other")) %>% 
   janitor::tabyl(MSOA11CD, IMD_top10) %>% 
@@ -100,13 +107,36 @@ imd_msoa = imd_lsoa %>%
   # calculate proportion of most deprived LSOAs
   mutate(Prop_top10 = Top10 / (Top10 + Other)) %>% 
   
-  mutate(Country = get_country(MSOA11CD)) %>% 
-  
-  # calculate deciles for higher-level geography within nations
-  group_by(Country) %>% 
-  add_risk_quantiles("Prop_top10", quants = 10) %>% 
-  ungroup()
+  mutate(Country = get_country(MSOA11CD))
 
+# need to calculate deciles separately and merge into dataframe
+imd_msoa_e = imd_msoa %>% 
+  filter(Country == "England") %>% 
+  select(MSOA11CD, Prop_top10) %>% 
+  add_risk_quantiles("Prop_top10", quants = 10)
+
+imd_msoa_w = imd_msoa %>% 
+  filter(Country == "Wales") %>% 
+  select(MSOA11CD, Prop_top10) %>% 
+  add_risk_quantiles("Prop_top10", quants = 10)
+
+imd_msoa_s = imd_msoa %>% 
+  filter(Country == "Scotland") %>% 
+  select(MSOA11CD, Prop_top10) %>% 
+  add_risk_quantiles("Prop_top10", quants = 10)
+
+imd_msoa_n = imd_msoa %>% 
+  filter(Country == "Northern Ireland") %>% 
+  select(MSOA11CD, Prop_top10) %>% 
+  add_risk_quantiles("Prop_top10", quants = 10)
+
+# merge quantiles into imd_msoa
+imd_msoa = imd_msoa %>% 
+  select(-Prop_top10) %>% 
+  left_join(
+    bind_rows(imd_msoa_e, imd_msoa_w, imd_msoa_s, imd_msoa_n),
+    by = "MSOA11CD"
+  )
 
 ##
 ## LAD
@@ -213,6 +243,55 @@ ruc_ni = ruc_ni %>%
          Rural = replace_na(as.integer(Rural), 0))
 
 ##
+## summarise into MSOAs, calculating proportions of urban versus rural areas in each
+## - count the number of urban and rural (and mixed, in NI) LSOAs in each MSOA
+## - calculate the proportion of urban LSOAs
+## - categorise into three quantiles
+##
+# England
+ruc_eng_msoa = ruc_ew %>% 
+  filter(startsWith(LSOA11CD, "E")) %>%
+  left_join(lookup_uk_lsoa_msoa, by = "LSOA11CD") %>% 
+  
+  tabyl(MSOA11CD, RUC) %>% 
+  mutate(Prop_Urban = Urban / (Urban + Rural)) %>% 
+  add_risk_quantiles("Prop_Urban", quants = 3) %>% 
+  
+  select(MSOA11CD, Prop_Urban, Prop_Urban_q, Prop_Urban_q_name)
+
+# Wales
+ruc_wal_msoa = ruc_ew %>% 
+  filter(startsWith(LSOA11CD, "W")) %>%
+  left_join(lookup_uk_lsoa_msoa, by = "LSOA11CD") %>% 
+  
+  tabyl(MSOA11CD, RUC) %>% 
+  mutate(Prop_Urban = Urban / (Urban + Rural)) %>% 
+  add_risk_quantiles("Prop_Urban", quants = 3) %>% 
+  
+  select(MSOA11CD, Prop_Urban, Prop_Urban_q, Prop_Urban_q_name)
+
+# Scotland
+ruc_sco_msoa = ruc_sco %>% 
+  left_join(lookup_uk_lsoa_msoa, by = "LSOA11CD") %>% 
+  
+  tabyl(MSOA11CD, RUC) %>% 
+  mutate(Prop_Urban = Urban / (Urban + Rural)) %>% 
+  add_risk_quantiles("Prop_Urban", quants = 3) %>% 
+  
+  select(MSOA11CD, Prop_Urban, Prop_Urban_q, Prop_Urban_q_name)
+
+# NI
+ruc_ni_lsoa = ruc_ni %>%
+  mutate(Prop_Urban = (Urban + (Mixed / 2)) / (Urban + Mixed + Rural)) %>%   # ARBITRARY DECISION: counting half the mixed LSOAs as urban
+  add_risk_quantiles("Prop_Urban", quants = 3) %>% 
+  
+  select(MSOA11CD = LSOA11CD, Prop_Urban, Prop_Urban_q, Prop_Urban_q_name)
+
+# stitch these into a UK-wide dataframe
+ruc_uk_msoa = bind_rows(ruc_eng_msoa, ruc_wal_msoa, ruc_sco_msoa, ruc_ni_lsoa)
+
+
+##
 ## summarise into Local Authorities, calculating proportions of urban versus rural areas in each
 ## - count the number of urban and rural (and mixed, in NI) LSOAs in each LAD
 ## - calculate the proportion of urban LSOAs
@@ -275,11 +354,7 @@ unique(ruc_ni_lad$Prop_Urban_q_name)
 
 
 ###############################################################################
-## Calculate inequalities for each indicator in each nation
-##
-
-##
-## Local Authority-level = HLE, Asylum support, migrant destitution, digital exclusion
+## Calculate inequalities for each indicator in each nation - for Local Authorities
 ##
 risk_uk_lad = bind_rows(
   risk_eng_lad %>% select(LAD17CD, Sec95, destitution_migrant, HLE_birth, digital_total_mult, destitution_all,  # LAD-level risks
@@ -294,18 +369,6 @@ risk_uk_lad = bind_rows(
   risk_ni_lad  %>% select(LAD17CD = LAD18CD, Sec95, HLE_birth, digital_total_mult,  # LAD-level risks
                           worst_floods, worst_lonely, worst_alone)  # MSOA-level risks
 )
-  
-  # make friendly indicator names
-  # rename(`Asylum seekers receiving support` = Sec95,
-  #        `Migrant destitution` = destitution_migrant,
-  #        `Healthy life expectancy` = HLE_birth,
-  #        `Digital exclusion` = digital_total_mult,
-  #        Destitution = destitution_all
-  #        )
-
-# risk_uk_lad %>% 
-#   filter(Country == "England") %>% 
-#   ggplot(aes(x = `Destitution`)) + geom_histogram()
 
 # convert to long format and tidy up data
 uk_lad = risk_uk_lad %>% 
@@ -407,12 +470,29 @@ sum_uk_lad %>%
 
 
 ###############################################################################
+## Calculate inequalities for each indicator in each nation - for MSOAs
+##
+risk_uk_msoa = bind_rows(
+  risk_eng_msoa %>% select(MSOA11CD, n_fires, n_people_flood, loneills_2018, prop_alone),
+  risk_wal_msoa %>% select(MSOA11CD, n_people_flood, loneills_2018, prop_alone),
+  risk_sco_msoa %>% select(MSOA11CD, n_fires, loneills_2018, prop_alone),
+  risk_ni_lsoa  %>% select(MSOA11CD = LSOA11CD, n_people_flood, loneills_2018, prop_alone)
+)
+
+# convert to long format and tidy up data
+uk_msoa = risk_uk_msoa %>% 
+  left_join(imd_msoa, by = "MSOA11CD") %>%   # merge deprivation summary
+  left_join(ruc_uk_msoa, by = "MSOA11CD") %>% 
+  
+  select(-Other, -Top10, -Prop_top10_q_name) %>% 
+  
+  rename(Deprivation = Prop_top10_q, `Rural-urban classification` = Prop_Urban_q) %>% 
+  pivot_longer(cols = c(Deprivation, `Rural-urban classification`), names_to = "Domain", values_to = "Domain Value")
+
+
+###############################################################################
 ## Analyse healthy life expectancy
 ##
-# deprivation
-uk_lad_dep = uk_lad %>% 
-  filter(Domain == "Deprivation")
-
 # HLE covars
 uk_lad_dep_hle = uk_lad %>% 
   filter(Domain == "Deprivation") %>% 
@@ -425,58 +505,15 @@ uk_lad_dep_hle %>%
   geom_histogram(binwidth = 1) +
   facet_wrap(~Country, scales = "free_y")
 
-##
-## how does healthy life expectancy differ between nations (on average; non-spatial)?
-##
-m_hle_country = lm(HLE_birth ~ Country, data = uk_lad_dep_hle)
+# summary stats by country
+tapply(uk_lad_dep_hle$HLE_birth, uk_lad_dep_hle$Country, summary)
+tapply(uk_lad_dep_hle$Prop_top10, uk_lad_dep_hle$Country, summary)
 
-plot(m_hle_country)  # check residuals etc.
-glance(m_hle_country)  # look at model fit etc.
-
-tidy(m_hle_country, conf.int = T)
-
-# Bayesian models
-library(rstanarm)
-library(loo)
-
-m_hle_country = stan_glm(HLE_birth ~ Country, 
-                         data = uk_lad_dep_hle,
-                         prior_intercept = normal(0, 5), prior = normal(0, 5),
-                         adapt_delta = 0.99, chains = 4)
-
-mlm_hle_country = stan_lmer(HLE_birth ~ (1 | Country), 
-                            data = uk_lad_dep_hle,
-                            prior_intercept = normal(0, 5), prior = normal(0, 5),
-                            adapt_delta = 0.99, chains = 4)
-
-loo_m_hle = loo(m_hle_country)
-loo_mlm_hle = loo(mlm_hle_country)
-
-loo_compare(loo_m_hle, loo_mlm_hle)
-
-plot(mlm_hle_country)
-
-# plot model predictions
-post = posterior_predict(mlm_hle_country)
-pred = posterior_linpred(mlm_hle_country)
-
-quants = apply(post, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
-quants2 = apply(pred, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
-row.names(quants) = c("sim.lwr", "sim.med", "sim.upr")
-row.names(quants2) = c("lwr", "HLE_birth.pred", "upr")
-
-hle_pred = cbind(uk_lad_dep_hle, t(quants), t(quants2))
-
-ggplot(hle_pred, aes(x = Country, y = HLE_birth.pred, colour = Country)) +
-  geom_point(aes(y = HLE_birth), alpha = 0.2, shape = 4, #size = 2,
-             position = position_dodge(0.9), show.legend = F) +
+# range of HLE in least-deprived LADs
+uk_lad_dep_hle %>% 
+  filter(Prop_top10 == 0) %>% 
+  summarise(min(HLE_birth), max(HLE_birth))
   
-  geom_point(position = position_dodge(0.9), size = 3) +
-  geom_linerange(aes(ymin=lwr, ymax=upr), position = position_dodge(0.9), lwd = 1.5) +
-  
-  labs(y = "HLE at birth", colour = NULL) +
-  
-  theme_classic()
 
 ##
 ## how does HLE differ between deprivation deciles and nations (non-spatial)?
@@ -494,17 +531,10 @@ m_hle_country_dep = stan_glm(HLE_birth ~ Prop_top10 * Country,
                              prior_intercept = normal(0, 5), prior = normal(0, 5),
                              adapt_delta = 0.99, chains = 4)
 
-mlm_hle_country_dep = stan_lmer(HLE_birth ~ (Prop_top10 | Country), 
-                                data = uk_lad_dep_hle,
-                                prior_intercept = normal(0, 5), prior = normal(0, 5),
-                                adapt_delta = 0.99, chains = 4)
-
-loo_m_hle = loo(m_hle_country_dep)
-loo_mlm_hle = loo(mlm_hle_country_dep)
-
-loo_compare(loo_m_hle, loo_mlm_hle)
-
+# plot coefficients
 plot(m_hle_country_dep)
+
+tidy(m_hle_country_dep, conf.int = T)
 
 # plot model predictions for proportion of deprivation and country on HLE
 new.data = expand_grid(
@@ -538,3 +568,64 @@ ggplot(new.data, aes(x = Prop_top10, y = HLE_birth.pred)) +
   theme_classic()
 
 ggsave("plots/nations/hle.png", width = 175, height = 150, units = "mm")
+
+
+###############################################################################
+## Analyse flooding
+##
+uk_msoa_flood = uk_msoa %>% 
+  filter(Domain == "Deprivation") %>% 
+  select(Country, MSOA11CD, Deprivation = `Domain Value`, Prop_top10, n_people_flood) %>% 
+  na.omit()
+
+uk_msoa_flood %>% 
+  ggplot(aes(x = factor(Deprivation), y = n_people_flood)) +
+  geom_boxplot() +
+  facet_wrap(~ Country)
+
+
+# m_flood = lm(n_people_flood ~ Prop_top10 * Country, data = uk_msoa_flood)
+# tidy(m_flood, conf.int = T)
+
+# fit model
+m_flood = stan_glm(n_people_flood ~ Prop_top10 * Country, 
+                   data = uk_msoa_flood,
+                   prior_intercept = normal(0, 5), prior = normal(0, 5),
+                   adapt_delta = 0.99, chains = 4)
+
+# plot coefficients
+plot(m_flood)
+
+# plot model predictions for proportion of deprivation and country on HLE
+new.data = expand_grid(
+  Country = c("England", "Wales"),
+  Prop_top10 = seq(0, 1, by = 0.01)
+)
+
+post = posterior_predict(m_flood, newdata = new.data)
+pred = posterior_linpred(m_flood, newdata = new.data)
+
+quants = apply(post, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
+quants2 = apply(pred, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
+row.names(quants) = c("sim.lwr", "sim.med", "sim.upr")
+row.names(quants2) = c("lwr", "flood.pred", "upr")
+
+new.data = cbind(new.data, t(quants), t(quants2))
+
+ggplot(new.data, aes(x = Prop_top10, y = flood.pred)) +
+  geom_point(data = uk_msoa_flood, aes(y = n_people_flood), alpha = 0.2) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr, fill = Country), alpha = 0.4, show.legend = F) +
+  geom_line(aes(colour = Country), lwd = 1.5, show.legend = F) +
+  
+  facet_wrap(~Country) +
+  
+  scale_color_brewer(palette = "Accent") +
+  scale_fill_brewer(palette = "Accent") +
+  scale_x_continuous(labels = scales::percent) +
+  scale_y_continuous(labels = scales::comma) +
+  
+  labs(y = "Number of people at risk of flooding\n", x = "\nProportion of highly deprived neighbourhoods") +
+  theme_classic()
+
+ggsave("plots/nations/flood.png", width = 175, height = 150, units = "mm")
+
