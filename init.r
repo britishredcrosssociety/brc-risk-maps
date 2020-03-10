@@ -20,3 +20,7 @@ load_lads = function(year = 2017) {
     readr::read_csv("https://opendata.arcgis.com/datasets/35de30c6778b463a8305939216656132_0.csv")
     
 }
+
+# create directories
+if (!dir.exists(data.dir.processed)) dir.create(data.dir.processed)
+if (!dir.exists(data.dir.out)) dir.create(data.dir.out)
