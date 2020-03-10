@@ -370,19 +370,19 @@ risk_uk_lad = bind_rows(
                           worst_floods, worst_lonely, worst_alone)  # MSOA-level risks
 )
 
-# convert to long format and tidy up data
+# merge indicators, IMD and RUC
 uk_lad = risk_uk_lad %>% 
   left_join(imd_lad, by = "LAD17CD") %>%   # merge deprivation summary
   left_join(ruc_uk_lad, by = "LAD17CD") %>% 
   
   select(-Other, -Top10, -Prop_top10_q_name) %>% 
-  
-  rename(Deprivation = Prop_top10_q, `Rural-urban classification` = Prop_Urban_q) %>% 
-  pivot_longer(cols = c(Deprivation, `Rural-urban classification`), names_to = "Domain", values_to = "Domain Value")
+  rename(Deprivation = Prop_top10_q, `Rural-urban classification` = Prop_Urban_q)
 
 # summarise each indicator within countries and domains (most need to report the max. value, but...
 # ... Health Life Expectancy should report min. (i.e. lowest HLE))
 sum_uk_lad = uk_lad %>% 
+  pivot_longer(cols = c(Deprivation, `Rural-urban classification`), names_to = "Domain", values_to = "Domain Value") %>%  # convert to long format
+
   group_by(Country, Domain, `Domain Value`) %>% 
   summarise(
     # LAD-level indicators
@@ -494,31 +494,35 @@ uk_msoa = risk_uk_msoa %>%
 ## Analyse healthy life expectancy
 ##
 # HLE covars
-uk_lad_dep_hle = uk_lad %>% 
-  filter(Domain == "Deprivation") %>% 
-  select(Country, LAD17CD, Deprivation = `Domain Value`, Prop_top10, HLE_birth) %>% 
+uk_lad_hle = uk_lad %>% 
+  select(Country, LAD17CD, Deprivation, Prop_top10, RUC = `Rural-urban classification`, Prop_Urban, HLE_birth) %>% 
   na.omit()
 
 # histograms of HLE by country
-uk_lad_dep_hle %>% 
+uk_lad_hle %>% 
   ggplot(aes(x = HLE_birth, fill = Country)) +
   geom_histogram(binwidth = 1) +
   facet_wrap(~Country, scales = "free_y")
 
 # summary stats by country
-tapply(uk_lad_dep_hle$HLE_birth, uk_lad_dep_hle$Country, summary)
-tapply(uk_lad_dep_hle$Prop_top10, uk_lad_dep_hle$Country, summary)
+tapply(uk_lad_hle$HLE_birth, uk_lad_hle$Country, summary)
+tapply(uk_lad_hle$Prop_top10, uk_lad_hle$Country, summary)
+tapply(uk_lad_hle$Prop_Urban, uk_lad_hle$Country, summary)
 
 # range of HLE in least-deprived LADs
-uk_lad_dep_hle %>% 
-  filter(Prop_top10 == 0) %>% 
+uk_lad_hle %>% 
+  filter(Prop_top10 == 0 & Country == "England") %>% 
+  summarise(min(HLE_birth), max(HLE_birth))
+
+# range of HLE in most-urban LADs
+uk_lad_hle %>% 
+  filter(Prop_Urban == 1 & Country == "England") %>% 
   summarise(min(HLE_birth), max(HLE_birth))
   
-
 ##
-## how does HLE differ between deprivation deciles and nations (non-spatial)?
+## how does HLE differ between deprivation and nations (non-spatial)?
 ##
-m_hle_dep = lm(HLE_birth ~ Prop_top10 * Country, data = uk_lad_dep_hle)
+m_hle_dep = lm(HLE_birth ~ Prop_top10 * Country, data = uk_lad_hle)
 
 plot(m_hle_dep)  # check residuals etc.
 glance(m_hle_dep)  # look at model fit etc.
@@ -526,24 +530,24 @@ glance(m_hle_dep)  # look at model fit etc.
 tidy(m_hle_dep, conf.int = T)
 
 # Bayesian version
-m_hle_country_dep = stan_glm(HLE_birth ~ Prop_top10 * Country, 
-                             data = uk_lad_dep_hle,
+m_hle_dep = stan_glm(HLE_birth ~ Prop_top10 * Country, 
+                             data = uk_lad_hle,
                              prior_intercept = normal(0, 5), prior = normal(0, 5),
                              adapt_delta = 0.99, chains = 4)
 
 # plot coefficients
-plot(m_hle_country_dep)
+plot(m_hle_dep)
 
-tidy(m_hle_country_dep, conf.int = T)
+tidy(m_hle_dep, conf.int = T)
 
 # plot model predictions for proportion of deprivation and country on HLE
 new.data = expand_grid(
-  Country = unique(uk_lad_dep_hle$Country),
+  Country = unique(uk_lad_hle$Country),
   Prop_top10 = seq(0, 1, by = 0.01)
 )
 
-post = posterior_predict(m_hle_country_dep, newdata = new.data)
-pred = posterior_linpred(m_hle_country_dep, newdata = new.data)
+post = posterior_predict(m_hle_dep, newdata = new.data)
+pred = posterior_linpred(m_hle_dep, newdata = new.data)
 
 quants = apply(post, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
 quants2 = apply(pred, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
@@ -553,7 +557,7 @@ row.names(quants2) = c("lwr", "HLE_birth.pred", "upr")
 new.data = cbind(new.data, t(quants), t(quants2))
 
 ggplot(new.data, aes(x = Prop_top10, y = HLE_birth.pred)) +
-  geom_point(data = uk_lad_dep_hle, aes(y = HLE_birth), alpha = 0.2) +
+  geom_point(data = uk_lad_hle, aes(y = HLE_birth), alpha = 0.2) +
   geom_ribbon(aes(ymin = lwr, ymax = upr, fill = Country), alpha = 0.4, show.legend = F) +
   geom_line(aes(colour = Country), lwd = 1.5, show.legend = F) +
   
@@ -564,10 +568,163 @@ ggplot(new.data, aes(x = Prop_top10, y = HLE_birth.pred)) +
   scale_x_continuous(labels = scales::percent) +
   scale_y_continuous(breaks = seq(40, 70, by = 5)) +
   
-  labs(y = "Healthy life expectancy at birth (years)\n", x = "\nProportion of highly deprived neighbourhoods") +
+  labs(y = "Healthy life expectancy at birth (years)\n", x = "\nProportion of highly deprived neighbourhoods in a Local Authority") +
   theme_classic()
 
-ggsave("plots/nations/hle.png", width = 175, height = 150, units = "mm")
+ggsave("plots/nations/hle - deprivation.png", width = 175, height = 150, units = "mm")
+
+##
+## how does HLE differ between urban/rural and nations (non-spatial)?
+##
+# m_hle_ruc = lm(HLE_birth ~ Prop_Urban * Country, data = uk_lad_hle)
+# 
+# plot(m_hle_ruc)  # check residuals etc.
+# glance(m_hle_ruc)  # look at model fit etc.
+# 
+# tidy(m_hle_ruc, conf.int = T)
+
+# Bayesian version
+m_hle_ruc = stan_glm(HLE_birth ~ Prop_Urban * Country, 
+                     data = uk_lad_hle,
+                     prior_intercept = normal(0, 5), prior = normal(0, 5),
+                     adapt_delta = 0.99, chains = 4)
+
+# plot coefficients
+plot(m_hle_ruc)
+
+# plot model predictions for proportion of deprivation and country on HLE
+new.data = expand_grid(
+  Country = unique(uk_lad_hle$Country),
+  Prop_Urban = seq(0, 1, by = 0.01)
+)
+
+post = posterior_predict(m_hle_ruc, newdata = new.data)
+pred = posterior_linpred(m_hle_ruc, newdata = new.data)
+
+quants = apply(post, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
+quants2 = apply(pred, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
+row.names(quants) = c("sim.lwr", "sim.med", "sim.upr")
+row.names(quants2) = c("lwr", "HLE_birth.pred", "upr")
+
+new.data = cbind(new.data, t(quants), t(quants2))
+
+ggplot(new.data, aes(x = Prop_Urban, y = HLE_birth.pred)) +
+  geom_point(data = uk_lad_hle, aes(y = HLE_birth), alpha = 0.2) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr, fill = Country), alpha = 0.4, show.legend = F) +
+  geom_line(aes(colour = Country), lwd = 1.5, show.legend = F) +
+  
+  facet_wrap(~Country) +
+  
+  scale_color_brewer(palette = "Accent") +
+  scale_fill_brewer(palette = "Accent") +
+  scale_x_continuous(labels = scales::percent) +
+  scale_y_continuous(breaks = seq(40, 70, by = 5)) +
+  
+  labs(y = "Healthy life expectancy at birth (years)\n", x = "\nProportion of urban neighbourhoods in a Local Authority") +
+  theme_classic()
+
+ggsave("plots/nations/hle - rural urban.png", width = 175, height = 150, units = "mm")
+
+##
+## Interaction between deprivation and urban
+##
+m_hle_both = stan_glm(HLE_birth ~ Prop_top10 * Prop_Urban * Country, 
+                      data = uk_lad_hle,
+                      prior_intercept = normal(0, 5), prior = normal(0, 5),
+                      adapt_delta = 0.99, chains = 4)
+
+# see whether the full interaction model fits best, or whether it's better to report deprivation and RUC separately
+loo_m_hle_dep = loo(m_hle_dep)
+loo_m_hle_ruc = loo(m_hle_ruc)
+loo_m_hle_both = loo(m_hle_both)
+
+loo_compare(loo_m_hle_dep, loo_m_hle_ruc, loo_m_hle_both)  #--> deprivation model fits best - report them separately
+
+
+
+# plot coefficients
+plot(m_hle_both)
+
+# plot model predictions for proportion of deprivation and country on HLE
+new.data = expand_grid(
+  Country = unique(uk_lad_hle$Country),
+  Prop_Urban = c(0, 1),
+  Prop_top10 = c(0, 1)
+)
+
+post = posterior_predict(m_hle_both, newdata = new.data)
+pred = posterior_linpred(m_hle_both, newdata = new.data)
+
+quants = apply(post, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
+quants2 = apply(pred, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
+row.names(quants) = c("sim.lwr", "sim.med", "sim.upr")
+row.names(quants2) = c("lwr", "HLE_birth.pred", "upr")
+
+new.data = cbind(new.data, t(quants), t(quants2))
+
+# labels for x axis
+new.data = new.data %>% 
+  mutate(x_label = case_when(
+    Prop_top10 == 0 & Prop_Urban == 0   ~ "Rural, no deprivation",
+    # Prop_top10 == 0 & Prop_Urban == 0.5 ~ "Mixed rural/urban, no deprivation",
+    Prop_top10 == 0 & Prop_Urban == 1   ~ "Urban, no deprivation",
+    
+    # Prop_top10 == 0.5 & Prop_Urban == 0   ~ "Rural, 50% deprivation",
+    # Prop_top10 == 0.5 & Prop_Urban == 0.5 ~ "Mixed rural/urban, 50% deprivation",
+    # Prop_top10 == 0.5 & Prop_Urban == 1   ~ "Urban, 50% deprivation",
+    
+    Prop_top10 == 1 & Prop_Urban == 0   ~ "Rural, full deprivation",
+    # Prop_top10 == 1 & Prop_Urban == 0.5 ~ "Mixed rural/urban, full deprivation",
+    Prop_top10 == 1 & Prop_Urban == 1   ~ "Urban, full deprivation"
+  ))
+
+
+ggplot(new.data, aes(x = x_label, y = HLE_birth.pred, colour = Country)) +
+  geom_pointrange(aes(ymin = lwr, ymax = upr)) +
+  
+  facet_wrap(~Country) +
+  
+  labs(y = "Healthy life expectancy at birth (years)\n", x = NULL, colour = NULL) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave("plots/nations/hle - deprivation and urban.png", width = 175, height = 150, units = "mm")
+
+##
+## table of HLE 
+##
+uk_lad_hle %>% 
+  filter(Deprivation %in% c(1, 10)) %>% 
+  
+  group_by(Country, Deprivation, RUC) %>% 
+  summarise(HLE_med = median(HLE_birth, na.rm = T),
+            HLE_sd  = sd(HLE_birth, na.rm = T)) %>% 
+  
+  mutate(HLE_sd = replace_na(HLE_sd, 0)) %>% 
+  
+  # labels for x axis
+  mutate(x_label = factor(case_when(
+    Deprivation == 10 & RUC == 3 ~ "Least deprived, mostly rural",
+    Deprivation == 10 & RUC == 2 ~ "Least deprived, mixed rural/urban",
+    Deprivation == 10 & RUC == 1 ~ "Least deprived, mostly urban",
+    
+    Deprivation == 1 & RUC == 3 ~ "Most deprived, mostly rural",
+    Deprivation == 1 & RUC == 2 ~ "Most deprived, mixed rural/urban",
+    Deprivation == 1 & RUC == 1 ~ "Most deprived, mostly urban"
+  ),
+  levels = c("Least deprived, mostly rural", "Least deprived, mixed rural/urban", "Least deprived, mostly urban",
+             "Most deprived, mostly rural", "Most deprived, mixed rural/urban", "Most deprived, mostly urban"))) %>% 
+  
+  ggplot(aes(x = x_label, y = HLE_med, colour = Country)) +
+  geom_pointrange(aes(ymin = HLE_med - HLE_sd, ymax = HLE_med + HLE_sd)) +
+  
+  facet_wrap(~Country) +
+  
+  theme_classic() +
+  labs(y = "Healthy life expectancy at birth (years)\n", x = NULL, colour = NULL) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
 
 
 ###############################################################################
