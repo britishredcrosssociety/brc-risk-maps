@@ -493,11 +493,14 @@ uk_msoa = risk_uk_msoa %>%
 ###############################################################################
 ## Analyse healthy life expectancy
 ##
-# HLE covars
+# make dataset for analysis
 uk_lad_hle = uk_lad %>% 
   select(Country, LAD17CD, Deprivation, Prop_top10, RUC = `Rural-urban classification`, Prop_Urban, HLE_birth) %>% 
   na.omit()
 
+##
+## descriptive stats
+##
 # histograms of HLE by country
 uk_lad_hle %>% 
   ggplot(aes(x = HLE_birth, fill = Country)) +
@@ -518,7 +521,32 @@ uk_lad_hle %>%
 uk_lad_hle %>% 
   filter(Prop_Urban == 1 & Country == "England") %>% 
   summarise(min(HLE_birth), max(HLE_birth))
+
+##
+## how does average HLE vary across nations?
+##
+# median/sd HLE across countries
+uk_lad_hle %>% 
+  group_by(Country) %>% 
+  summarise(HLE_med = median(HLE_birth, na.rm = T),
+            HLE_sd  = sd(HLE_birth, na.rm = T)) %>% 
   
+  mutate(HLE_sd = replace_na(HLE_sd, 0)) %>% 
+  
+  ggplot(aes(x = Country, y = HLE_med, colour = Country)) +
+  geom_pointrange(aes(ymin = HLE_med - HLE_sd, ymax = HLE_med + HLE_sd), show.legend = F) +
+  
+  theme_classic() +
+  labs(y = "Healthy life expectancy at birth (years)\n", x = NULL, colour = NULL) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave("plots/nations/hle - country.png", width = 100, height = 110, units = "mm")
+
+# model average HLE across nations
+(m_hle = tidy(lm(HLE_birth ~ Country, data = uk_lad_hle), conf.int = T))
+
+m_hle$conf.high * 12  # convert proportions of a year to months
+
 ##
 ## how does HLE differ between deprivation and nations (non-spatial)?
 ##
@@ -640,8 +668,6 @@ loo_m_hle_both = loo(m_hle_both)
 
 loo_compare(loo_m_hle_dep, loo_m_hle_ruc, loo_m_hle_both)  #--> deprivation model fits best - report them separately
 
-
-
 # plot coefficients
 plot(m_hle_both)
 
@@ -725,8 +751,6 @@ uk_lad_hle %>%
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 
-
-
 ###############################################################################
 ## Analyse flooding
 ##
@@ -785,4 +809,163 @@ ggplot(new.data, aes(x = Prop_top10, y = flood.pred)) +
   theme_classic()
 
 ggsave("plots/nations/flood.png", width = 175, height = 150, units = "mm")
+
+
+###############################################################################
+## Analyse Section 95 support
+##
+# make dataset for analysis
+uk_lad_asy = uk_lad %>% 
+  select(Country, LAD17CD, Deprivation, Prop_top10, RUC = `Rural-urban classification`, Prop_Urban, Sec95) %>% 
+  na.omit()
+
+##
+## descriptive stats
+##
+# histograms of HLE by country
+uk_lad_asy %>%
+  filter(Sec95 > 0) %>%
+  
+  ggplot(aes(x = Sec95, fill = Country)) +
+  geom_histogram(binwidth = 20, show.legend = F) +
+  
+  facet_wrap(~Country, scales = "free") +
+  theme_classic() +
+  labs(x = "No. people receiving Section 95 support", y = "Frequency")
+
+ggsave("plots/nations/displacement - country.png", width = 150, height = 110, units = "mm")
+
+# which LADs host the most asylum seekers in each country?
+uk_lad_asy %>% 
+  group_by(Country) %>% 
+  top_n(Sec95, n = 1)
+
+# summary stats by country
+tapply(uk_lad_asy$Sec95, uk_lad_asy$Country, summary)
+tapply(uk_lad_asy$Prop_top10, uk_lad_asy$Country, summary)
+tapply(uk_lad_asy$Prop_Urban, uk_lad_asy$Country, summary)
+
+# range of asylum seekers in least-deprived LADs
+uk_lad_asy %>% 
+  filter(Prop_top10 == 0 & Country == "England") %>% 
+  summarise(min(Sec95), max(Sec95))
+
+# range of HLE in most-urban LADs
+uk_lad_asy %>% 
+  filter(Prop_Urban == 1 & Country == "England") %>% 
+  summarise(min(Sec95), max(Sec95))
+
+##
+## how does number of asylum seekers vary across nations?
+##
+# model average HLE across nations
+tidy(glm(Sec95 ~ Country, data = uk_lad_asy, family = "poisson"), conf.int = T)
+
+# fit zero-inflated poisson
+m_asy = stan_glm(Sec95 ~ Country,
+                 data = uk_lad_asy,
+                 family = neg_binomial_2,
+                 prior_intercept = normal(0, 5), prior = normal(0, 5),
+                 adapt_delta = 0.99, chains = 4)
+
+# check the proportion of zeroes in the dataset is similar to those predicted by the model
+prop_zero <- function(y) mean(y == 0)
+pp_check(m_asy, plotfun = "stat", stat = "prop_zero", binwidth = 0.01)  #--> yes - good
+
+tidy(m_asy) %>% mutate_if(is.numeric, exp)
+exp(posterior_interval(m_asy))
+
+##
+## how does S95 support differ between deprivation and nations (non-spatial)?
+##
+m_asy_dep = stan_glm(Sec95 ~ Prop_top10 * Country, 
+                     data = uk_lad_asy,
+                     family = neg_binomial_2,
+                     prior_intercept = normal(0, 5), prior = normal(0, 5),
+                     adapt_delta = 0.99, chains = 4)
+
+# plot coefficients
+plot(m_asy_dep)
+
+tidy(m_asy_dep, conf.int = T)
+
+# plot model predictions for proportion of deprivation and country on HLE
+new.data = expand_grid(
+  Country = unique(uk_lad$Country),
+  Prop_top10 = seq(0, 1, by = 0.01)
+)
+
+post = posterior_predict(m_asy_dep, newdata = new.data)
+pred = posterior_linpred(m_asy_dep, newdata = new.data)
+
+quants = apply(post, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
+quants2 = apply(pred, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
+row.names(quants) = c("sim.lwr", "sim.med", "sim.upr")
+row.names(quants2) = c("lwr", "Sec95.pred", "upr")
+
+new.data = cbind(new.data, t(quants), t(quants2))
+
+ggplot(new.data, aes(x = Prop_top10, y = Sec95.pred)) +
+  geom_point(data = uk_lad_asy, aes(y = Sec95), alpha = 0.2) +
+  # geom_ribbon(aes(ymin = lwr, ymax = upr, fill = Country), alpha = 0.4, show.legend = F) +
+  # geom_line(aes(colour = Country), lwd = 1.5, show.legend = F) +
+  # 
+  facet_wrap(~Country) +
+  
+  scale_color_brewer(palette = "Accent") +
+  scale_fill_brewer(palette = "Accent") +
+  scale_x_continuous(labels = scales::percent) +
+  # scale_y_continuous(breaks = seq(40, 70, by = 5)) +
+  
+  labs(y = "No. people receiving Section 95 support\n", x = "\nProportion of highly deprived neighbourhoods in a Local Authority") +
+  theme_classic()
+
+ggsave("plots/nations/displacement - deprivation.png", width = 175, height = 150, units = "mm")
+
+##
+## how does S95 support differ between rural-urban areas and nations (non-spatial)?
+##
+m_asy_ruc = stan_glm(Sec95 ~ Prop_Urban * Country, 
+                     data = uk_lad_asy,
+                     family = neg_binomial_2,
+                     prior_intercept = normal(0, 5), prior = normal(0, 5),
+                     adapt_delta = 0.99, chains = 4)
+
+# plot coefficients
+plot(m_asy_ruc)
+
+tidy(m_asy_ruc, conf.int = T)
+
+# plot model predictions for proportion of deprivation and country on HLE
+new.data = expand_grid(
+  Country = unique(uk_lad$Country),
+  Prop_Urban = seq(0, 1, by = 0.01)
+)
+
+post = posterior_predict(m_asy_ruc, newdata = new.data)
+pred = posterior_linpred(m_asy_ruc, newdata = new.data)
+
+quants = apply(post, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
+quants2 = apply(pred, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
+row.names(quants) = c("sim.lwr", "sim.med", "sim.upr")
+row.names(quants2) = c("lwr", "Sec95.pred", "upr")
+
+new.data = cbind(new.data, t(quants), t(quants2))
+
+ggplot(new.data, aes(x = Prop_top10, y = Sec95.pred)) +
+  geom_point(data = uk_lad_asy, aes(y = Sec95), alpha = 0.2) +
+  # geom_ribbon(aes(ymin = lwr, ymax = upr, fill = Country), alpha = 0.4, show.legend = F) +
+  # geom_line(aes(colour = Country), lwd = 1.5, show.legend = F) +
+  # 
+  facet_wrap(~Country) +
+  
+  scale_color_brewer(palette = "Accent") +
+  scale_fill_brewer(palette = "Accent") +
+  scale_x_continuous(labels = scales::percent) +
+  # scale_y_continuous(breaks = seq(40, 70, by = 5)) +
+  
+  labs(y = "No. people receiving Section 95 support\n", x = "\nProportion of highly deprived neighbourhoods in a Local Authority") +
+  theme_classic()
+
+ggsave("plots/nations/displacement - deprivation.png", width = 175, height = 150, units = "mm")
 
