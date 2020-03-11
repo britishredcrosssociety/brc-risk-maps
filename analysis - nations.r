@@ -107,7 +107,8 @@ imd_msoa = imd_lsoa %>%
   # calculate proportion of most deprived LSOAs
   mutate(Prop_top10 = Top10 / (Top10 + Other)) %>% 
   
-  mutate(Country = get_country(MSOA11CD))
+  mutate(Country = get_country(MSOA11CD)) %>% 
+  na.omit()
 
 # need to calculate deciles separately and merge into dataframe
 imd_msoa_e = imd_msoa %>% 
@@ -479,15 +480,15 @@ risk_uk_msoa = bind_rows(
   risk_ni_lsoa  %>% select(MSOA11CD = LSOA11CD, n_people_flood, loneills_2018, prop_alone)
 )
 
-# convert to long format and tidy up data
+# merge indicators, IMD and RUC
 uk_msoa = risk_uk_msoa %>% 
   left_join(imd_msoa, by = "MSOA11CD") %>%   # merge deprivation summary
   left_join(ruc_uk_msoa, by = "MSOA11CD") %>% 
   
   select(-Other, -Top10, -Prop_top10_q_name) %>% 
   
-  rename(Deprivation = Prop_top10_q, `Rural-urban classification` = Prop_Urban_q) %>% 
-  pivot_longer(cols = c(Deprivation, `Rural-urban classification`), names_to = "Domain", values_to = "Domain Value")
+  rename(Deprivation = Prop_top10_q, `Rural-urban classification` = Prop_Urban_q)
+  # pivot_longer(cols = c(Deprivation, `Rural-urban classification`), names_to = "Domain", values_to = "Domain Value")
 
 
 ###############################################################################
@@ -752,34 +753,44 @@ uk_lad_hle %>%
 
 
 ###############################################################################
-## Analyse flooding
+## Analyse flooding (in MSOAs)
 ##
+# make dataset for analysis
 uk_msoa_flood = uk_msoa %>% 
-  filter(Domain == "Deprivation") %>% 
-  select(Country, MSOA11CD, Deprivation = `Domain Value`, Prop_top10, n_people_flood) %>% 
+  select(Country, MSOA11CD, Deprivation, Prop_top10, RUC = `Rural-urban classification`, Prop_Urban, n_people_flood) %>% 
   na.omit()
 
+# show variation in flood risks by deprivation decile and country
 uk_msoa_flood %>% 
   ggplot(aes(x = factor(Deprivation), y = n_people_flood)) +
   geom_boxplot() +
   facet_wrap(~ Country)
 
+# look at distribution of people affected across countries
+uk_msoa_flood %>% 
+  ggplot(aes(x = n_people_flood)) +
+  geom_histogram(binwidth = 100) +
+  facet_wrap(~ Country)
 
-# m_flood = lm(n_people_flood ~ Prop_top10 * Country, data = uk_msoa_flood)
-# tidy(m_flood, conf.int = T)
-
-# fit model
+##
+## how does flood risk vary with deprivation and country?
+##
 m_flood = stan_glm(n_people_flood ~ Prop_top10 * Country, 
                    data = uk_msoa_flood,
+                   # family = neg_binomial_2,
                    prior_intercept = normal(0, 5), prior = normal(0, 5),
                    adapt_delta = 0.99, chains = 4)
+
+# check the proportion of zeroes in the dataset is similar to those predicted by the model - only if using negative binomial model
+# prop_zero <- function(y) mean(y == 0)
+# pp_check(m_flood, plotfun = "stat", stat = "prop_zero", binwidth = 0.01)  #--> yes - good
 
 # plot coefficients
 plot(m_flood)
 
 # plot model predictions for proportion of deprivation and country on HLE
 new.data = expand_grid(
-  Country = c("England", "Wales"),
+  Country = c("England", "Wales", "Northern Ireland"),
   Prop_top10 = seq(0, 1, by = 0.01)
 )
 
@@ -805,10 +816,54 @@ ggplot(new.data, aes(x = Prop_top10, y = flood.pred)) +
   scale_x_continuous(labels = scales::percent) +
   scale_y_continuous(labels = scales::comma) +
   
-  labs(y = "Number of people at risk of flooding\n", x = "\nProportion of highly deprived neighbourhoods") +
+  labs(y = "Number of people at risk of flooding\n", x = "\nProportion of highly deprived areas within a neighbourhood") +
   theme_classic()
 
-ggsave("plots/nations/flood.png", width = 175, height = 150, units = "mm")
+ggsave("plots/nations/flood - deprivation.png", width = 190, height = 150, units = "mm")
+
+##
+## how does flood risk vary with rurality and country?
+##
+m_flood_ruc = stan_glm(n_people_flood ~ Prop_Urban * Country, 
+                       data = uk_msoa_flood,
+                       prior_intercept = normal(0, 5), prior = normal(0, 5),
+                       adapt_delta = 0.99, chains = 4)
+
+# plot coefficients
+plot(m_flood_ruc)
+
+# plot model predictions for proportion of deprivation and country on HLE
+new.data = expand_grid(
+  Country = c("England", "Wales", "Northern Ireland"),
+  Prop_Urban = seq(0, 1, by = 0.01)
+)
+
+post = posterior_predict(m_flood_ruc, newdata = new.data)
+pred = posterior_linpred(m_flood_ruc, newdata = new.data)
+
+quants = apply(post, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
+quants2 = apply(pred, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
+row.names(quants) = c("sim.lwr", "sim.med", "sim.upr")
+row.names(quants2) = c("lwr", "flood.pred", "upr")
+
+new.data = cbind(new.data, t(quants), t(quants2))
+
+ggplot(new.data, aes(x = Prop_Urban, y = flood.pred)) +
+  geom_point(data = uk_msoa_flood, aes(y = n_people_flood), alpha = 0.2) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr, fill = Country), alpha = 0.4, show.legend = F) +
+  geom_line(aes(colour = Country), lwd = 1.5, show.legend = F) +
+  
+  facet_wrap(~Country) +
+  
+  scale_color_brewer(palette = "Accent") +
+  scale_fill_brewer(palette = "Accent") +
+  scale_x_continuous(labels = scales::percent) +
+  scale_y_continuous(labels = scales::comma, limits = c(0, NA)) +
+  
+  labs(y = "Number of people at risk of flooding\n", x = "\nProportion of urban areas within a neighbourhood") +
+  theme_classic()
+
+ggsave("plots/nations/flood - rural urban.png", width = 190, height = 150, units = "mm")
 
 
 ###############################################################################
@@ -822,6 +877,11 @@ uk_lad_asy = uk_lad %>%
 ##
 ## descriptive stats
 ##
+# totals per country
+uk_lad_asy %>% 
+  group_by(Country) %>% 
+  summarise(n = sum(Sec95))
+
 # histograms of HLE by country
 uk_lad_asy %>%
   filter(Sec95 > 0) %>%
@@ -845,23 +905,13 @@ tapply(uk_lad_asy$Sec95, uk_lad_asy$Country, summary)
 tapply(uk_lad_asy$Prop_top10, uk_lad_asy$Country, summary)
 tapply(uk_lad_asy$Prop_Urban, uk_lad_asy$Country, summary)
 
-# range of asylum seekers in least-deprived LADs
-uk_lad_asy %>% 
-  filter(Prop_top10 == 0 & Country == "England") %>% 
-  summarise(min(Sec95), max(Sec95))
-
-# range of HLE in most-urban LADs
-uk_lad_asy %>% 
-  filter(Prop_Urban == 1 & Country == "England") %>% 
-  summarise(min(Sec95), max(Sec95))
-
 ##
 ## how does number of asylum seekers vary across nations?
 ##
 # model average HLE across nations
 tidy(glm(Sec95 ~ Country, data = uk_lad_asy, family = "poisson"), conf.int = T)
 
-# fit zero-inflated poisson
+# fit poisson, accounting for all the zeroes in the data (i.e. Local Authorities with no asylum seekers)
 m_asy = stan_glm(Sec95 ~ Country,
                  data = uk_lad_asy,
                  family = neg_binomial_2,
@@ -952,11 +1002,11 @@ row.names(quants2) = c("lwr", "Sec95.pred", "upr")
 
 new.data = cbind(new.data, t(quants), t(quants2))
 
-ggplot(new.data, aes(x = Prop_top10, y = Sec95.pred)) +
+ggplot(new.data, aes(x = Prop_Urban, y = Sec95.pred)) +
   geom_point(data = uk_lad_asy, aes(y = Sec95), alpha = 0.2) +
   # geom_ribbon(aes(ymin = lwr, ymax = upr, fill = Country), alpha = 0.4, show.legend = F) +
   # geom_line(aes(colour = Country), lwd = 1.5, show.legend = F) +
-  # 
+  
   facet_wrap(~Country) +
   
   scale_color_brewer(palette = "Accent") +
@@ -964,8 +1014,139 @@ ggplot(new.data, aes(x = Prop_top10, y = Sec95.pred)) +
   scale_x_continuous(labels = scales::percent) +
   # scale_y_continuous(breaks = seq(40, 70, by = 5)) +
   
-  labs(y = "No. people receiving Section 95 support\n", x = "\nProportion of highly deprived neighbourhoods in a Local Authority") +
+  labs(y = "No. people receiving Section 95 support\n", x = "\nProportion of urban neighbourhoods in a Local Authority") +
   theme_classic()
 
-ggsave("plots/nations/displacement - deprivation.png", width = 175, height = 150, units = "mm")
+ggsave("plots/nations/displacement - rural urban.png", width = 175, height = 150, units = "mm")
 
+
+###############################################################################
+## Analyse loneliness (in MSOAs)
+##
+# make dataset for analysis
+uk_msoa_lonely = uk_msoa %>% 
+  select(Country, MSOA11CD, Deprivation, Prop_top10, RUC = `Rural-urban classification`, Prop_Urban, loneills_2018) %>% 
+  na.omit()
+
+# show variation in lonely risks by deprivation decile and country
+uk_msoa_lonely %>% 
+  ggplot(aes(x = factor(Deprivation), y = loneills_2018)) +
+  geom_boxplot() +
+  facet_wrap(~ Country)
+
+# look at distribution of people affected across countries
+uk_msoa_lonely %>% 
+  ggplot(aes(x = loneills_2018)) +
+  geom_histogram(binwidth = 1) +
+  facet_wrap(~ Country)
+
+##
+## how does loneliness risk vary across nations?
+##
+# median/sd HLE across countries
+uk_msoa_lonely %>% 
+  group_by(Country) %>% 
+  summarise(lonely_mean = mean(loneills_2018, na.rm = T),
+            lonely_sd   = sd(loneills_2018, na.rm = T)) %>% 
+  
+  mutate(lonely_sd = replace_na(lonely_sd, 0)) %>% 
+  
+  ggplot(aes(x = Country, y = lonely_mean, colour = Country)) +
+  geom_pointrange(aes(ymin = lonely_mean - lonely_sd, ymax = lonely_mean + lonely_sd), show.legend = F) +
+  
+  theme_classic() +
+  labs(y = "Loneliness risk (higher means greater risk)\n", x = NULL, colour = NULL) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave("plots/nations/lonely - country.png", width = 100, height = 110, units = "mm")
+
+# model loneliness risk across nations
+tidy(lm(loneills_2018 ~ Country, data = uk_msoa_lonely), conf.int = T)
+
+##
+## how does loneliness risk vary with deprivation and country?
+##
+m_lonely = stan_glm(loneills_2018 ~ Prop_top10 * Country, 
+                   data = uk_msoa_lonely,
+                   prior_intercept = normal(0, 5), prior = normal(0, 5),
+                   adapt_delta = 0.99, chains = 4)
+
+# plot coefficients
+plot(m_lonely)
+
+# plot model predictions for proportion of deprivation and country on HLE
+new.data = expand_grid(
+  Country = unique(uk_msoa$Country),
+  Prop_top10 = seq(0, 1, by = 0.01)
+)
+
+post = posterior_predict(m_lonely, newdata = new.data)
+pred = posterior_linpred(m_lonely, newdata = new.data)
+
+quants = apply(post, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
+quants2 = apply(pred, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
+row.names(quants) = c("sim.lwr", "sim.med", "sim.upr")
+row.names(quants2) = c("lwr", "lonely.pred", "upr")
+
+new.data = cbind(new.data, t(quants), t(quants2))
+
+ggplot(new.data, aes(x = Prop_top10, y = lonely.pred)) +
+  geom_point(data = uk_msoa_lonely, aes(y = loneills_2018), alpha = 0.2) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr, fill = Country), alpha = 0.4, show.legend = F) +
+  geom_line(aes(colour = Country), lwd = 1.5, show.legend = F) +
+  
+  facet_wrap(~Country) +
+  
+  scale_color_brewer(palette = "Accent") +
+  scale_fill_brewer(palette = "Accent") +
+  scale_x_continuous(labels = scales::percent) +
+  # scale_y_continuous(labels = scales::comma) +
+  
+  labs(y = "Risk of loneliness (higher numbers mean greater risk)\n", x = "\nProportion of highly deprived areas within a neighbourhood") +
+  theme_classic()
+
+ggsave("plots/nations/lonely - deprivation.png", width = 175, height = 150, units = "mm")
+
+##
+## how does lonely risk vary with rurality and country?
+##
+m_lonely_ruc = stan_glm(loneills_2018 ~ Prop_Urban * Country, 
+                       data = uk_msoa_lonely,
+                       prior_intercept = normal(0, 5), prior = normal(0, 5),
+                       adapt_delta = 0.99, chains = 4)
+
+# plot coefficients
+plot(m_lonely_ruc)
+
+# plot model predictions for proportion of deprivation and country on HLE
+new.data = expand_grid(
+  Country = unique(uk_msoa$Country),
+  Prop_Urban = seq(0, 1, by = 0.01)
+)
+
+post = posterior_predict(m_lonely_ruc, newdata = new.data)
+pred = posterior_linpred(m_lonely_ruc, newdata = new.data)
+
+quants = apply(post, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
+quants2 = apply(pred, 2, quantile, probs = c(0.025, 0.5, 0.975))  # quantiles over mcmc samples
+row.names(quants) = c("sim.lwr", "sim.med", "sim.upr")
+row.names(quants2) = c("lwr", "lonely.pred", "upr")
+
+new.data = cbind(new.data, t(quants), t(quants2))
+
+ggplot(new.data, aes(x = Prop_Urban, y = lonely.pred)) +
+  geom_point(data = uk_msoa_lonely, aes(y = loneills_2018), alpha = 0.2) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr, fill = Country), alpha = 0.4, show.legend = F) +
+  geom_line(aes(colour = Country), lwd = 1.5, show.legend = F) +
+  
+  facet_wrap(~Country) +
+  
+  scale_color_brewer(palette = "Accent") +
+  scale_fill_brewer(palette = "Accent") +
+  scale_x_continuous(labels = scales::percent) +
+  # scale_y_continuous(labels = scales::comma, limits = c(0, NA)) +
+  
+  labs(y = "Risk of loneliness (higher numbers mean greater risk)\n", x = "\nProportion of urban areas within a neighbourhood") +
+  theme_classic()
+
+ggsave("plots/nations/lonely - rural urban.png", width = 190, height = 150, units = "mm")
