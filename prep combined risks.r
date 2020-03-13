@@ -21,7 +21,7 @@ source("init.r")
 quants = 5  # how many fisher splits / quantiles to use
 
 risky_lads_file = file.path(data.dir.out, "Multiple risks in Local Authorities.xlsx")  # Excel file for saving lists of Local Authorities with multiple risks
-
+risky_lads_wb = createWorkbook()
 
 #################################################################################################################
 ## Create list of Local Authorities that have a BRC presence (or not)
@@ -363,7 +363,8 @@ eng_lad_risk_xl = eng_lad_risk %>%
   arrange(desc(`No. 1s`), `Total score`)
 
 # add to Excel file
-write.xlsx(as.data.frame(eng_lad_risk_xl), file = risky_lads_file, sheetName = "England", row.names = F, append = F)
+addWorksheet(risky_lads_wb, "England")
+writeData(risky_lads_wb, sheet="England", x=as.data.frame(eng_lad_risk_xl))
 
 
 #################################################################################################################
@@ -683,7 +684,8 @@ wal_lad_risk_xl = wal_lad_risk %>%
   arrange(desc(`No. 1s`), `Total score`)
 
 # add to Excel file
-write.xlsx(as.data.frame(wal_lad_risk_xl), file = risky_lads_file, sheetName = "Wales", row.names = F, append = T)
+addWorksheet(risky_lads_wb, "Wales")
+writeData(risky_lads_wb, sheet="Wales", x=as.data.frame(wal_lad_risk_xl))
 
 
 #################################################################################################################
@@ -944,7 +946,8 @@ sco_lad_risk_xl = sco_lad_risk %>%
   arrange(desc(`No. 1s`), `Total score`)
 
 # add to Excel file
-write.xlsx(as.data.frame(sco_lad_risk_xl), file = risky_lads_file, sheetName = "Scotland", row.names = F, append = T)
+addWorksheet(risky_lads_wb, "Scotland")
+writeData(risky_lads_wb, sheet="Scotland", x=as.data.frame(sco_lad_risk_xl))
 
 
 #################################################################################################################
@@ -1180,4 +1183,8 @@ ni_lad_risk_xl = ni_lad_risk %>%
   arrange(desc(`No. 1s`), `Total score`)
 
 # add to Excel file
-write.xlsx(as.data.frame(ni_lad_risk_xl), file = risky_lads_file, sheetName = "Northern Ireland", row.names = F, append = T)
+addWorksheet(risky_lads_wb, "Northern Ireland")
+writeData(risky_lads_wb, sheet="Northern Ireland", x=as.data.frame(ni_lad_risk_xl))
+
+# write out Excel file
+saveWorkbook(risky_lads_wb, risky_lads_file, overwrite = T)

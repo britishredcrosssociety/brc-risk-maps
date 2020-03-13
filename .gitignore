@@ -3,6 +3,13 @@ output/
 data/processed/*
 data/raw/digital-exclusion/
 data/raw/population/
+data/raw/floods/*.cpg
+data/raw/floods/*.dbf
+data/raw/floods/*.prj
+data/raw/floods/*.qpj
+data/raw/floods/*.shp
+data/raw/floods/*.shx
+data/raw/low-level-geography-dataset.xlsx
 
 # History files
 .Rhistory

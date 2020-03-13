@@ -11,7 +11,7 @@ install.packages(c(
   "readxl",
   "httr",
   "xml2",
-  "xlsx",
+  "openxlsx",
 
   # for spatial data
   "rgdal",
