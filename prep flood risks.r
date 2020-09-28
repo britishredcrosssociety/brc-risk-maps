@@ -20,34 +20,34 @@ source("init.r")
 # ONS publishes output area population estimates in separate files for each region
 pop_urls = c(
   # East Midlands
-  "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fcensusoutputareaestimatesintheeastmidlandsregionofengland%2fmid2018sape21dt10f/sape21dt10fmid2018eastmidlands.zip",
+  "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fcensusoutputareaestimatesintheeastmidlandsregionofengland%2fmid2019sape22dt10f/sape22dt10fmid2019eastmidlands.zip",
   
   # North West
-  "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fcensusoutputareaestimatesinthenorthwestregionofengland%2fmid2018sape21dt10b/sape21dt10bmid2018northwest.zip",
+  "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fcensusoutputareaestimatesinthenorthwestregionofengland%2fmid2019sape22dt10b/sape22dt10bmid2019northwest.zip",
   
   # South East
-  "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fcensusoutputareaestimatesinthesoutheastregionofengland%2fmid2018sape21dt10i/sape21dt10imid2018southeast.zip",
+  "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fcensusoutputareaestimatesinthesoutheastregionofengland%2fmid2019sape22dt10i/sape22dt10imid2019southeast.zip",
   
   # East
-  "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fcensusoutputareaestimatesintheeastregionofengland%2fmid2018sape21dt10h/sape21dt10hmid2018east.zip",
+  "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fcensusoutputareaestimatesintheeastregionofengland%2fmid2019sape22dt10h/sape22dt10hmid2019east.zip",
   
   # West Midlands
-  "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fcensusoutputareaestimatesinthewestmidlandsregionofengland%2fmid2018sape21dt10e/sape21dt10emid2018westmidlands.zip",
+  "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fcensusoutputareaestimatesinthewestmidlandsregionofengland%2fmid2019sape22dt10e/sape22dt10emid2019westmidlands.zip",
   
   # Wales
-  "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fcensusoutputareaestimatesinwales%2fmid2018sape21dt10j/sape21dt10jmid2018wales.zip",
+  "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fcensusoutputareaestimatesinwales%2fmid2019sape22dt10j/sape22dt10jmid2019wales.zip",
   
   # North East
-  "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fcensusoutputareaestimatesinthenortheastregionofengland%2fmid2018sape21dt10d/sape21dt10dmid2018northeast.zip",
+  "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fcensusoutputareaestimatesinthenortheastregionofengland%2fmid2019sape22dt10d/sape22dt10dmid2019northeast.zip",
   
   # South West
-  "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fcensusoutputareaestimatesinthesouthwestregionofengland%2fmid2018sape21dt10g/sape21dt10gmid2018southwest.zip",
+  "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fcensusoutputareaestimatesinthesouthwestregionofengland%2fmid2019sape22dt10g/sape22dt10gmid2019southwest.zip",
   
   # Yorkshire and The Humber
-  "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fcensusoutputareaestimatesintheyorkshireandthehumberregionofengland%2fmid2018sape21dt10c/sape21dt10cmid2018yorkshireandthehumber.zip",
+  "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fcensusoutputareaestimatesintheyorkshireandthehumberregionofengland%2fmid2019sape22dt10c/sape22dt10cmid2019yorkshireandthehumber.zip",
   
   # London
-  "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fcensusoutputareaestimatesinthelondonregionofengland%2fmid2018sape21dt10a/sape21dt10amid2018london.zip"
+  "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fcensusoutputareaestimatesinthelondonregionofengland%2fmid2019sape22dt10a/sape22dt10amid2019london.zip"
 )
 
 # download and upzip population estimates for each region
@@ -66,12 +66,12 @@ for (file in pop_files) {
   
   # if the merged dataset doesn't exist, create it
   if (!exists("pop")){
-    pop = read_excel(file, sheet = "Mid-2018 Persons", skip = 4) %>% 
+    pop = read_excel(file, sheet = "Mid-2019 Persons", skip = 4) %>% 
       select(OA11CD, LSOA11CD, `All Ages`)
     
   } else {
     # if the merged dataset does exist, append to it
-    temp_dataset = read_excel(file, sheet = "Mid-2018 Persons", skip = 4) %>% 
+    temp_dataset = read_excel(file, sheet = "Mid-2019 Persons", skip = 4) %>% 
       select(OA11CD, LSOA11CD, `All Ages`)
     
     pop = rbind(pop, temp_dataset)
@@ -99,7 +99,7 @@ unlink(tf)
 ##
 # Output Areas (December 2011) Population Weighted Centroids
 # source: http://geoportal.statistics.gov.uk/datasets/output-areas-december-2011-population-weighted-centroids
-oa = readOGR("https://opendata.arcgis.com/datasets/638c93fa316d448bb59669a139042165_0.geojson")
+oa = readOGR("https://opendata.arcgis.com/datasets/b0c86eaafc5a4f339eb36785628da904_0.geojson")
 
 
 #########################################################################################################################
@@ -188,6 +188,7 @@ oa_ni = readOGR(dsn = file.path(data.dir.in, "floods"),
 ##
 ## transform to WGS84 - web Mercator
 ##
+oa = spTransform(oa, map_proj)
 floods_eng = spTransform(floods_eng, map_proj)
 floods_wal = spTransform(floods_wal, map_proj)
 oa_ni = spTransform(oa_ni, map_proj)
@@ -265,7 +266,9 @@ oa_data = oa_data %>%
 floods_msoa = oa_data %>% 
   filter(!startsWith(OA11CD, "N")) %>%   # MSOAs don't exist in NI, so filter them out
   group_by(MSOA11CD) %>% 
-  summarise(n = sum(n))
+  summarise(n = sum(n)) %>% 
+  
+  bind_rows(floods_lsoa %>% filter(str_sub(LSOA11CD, 1, 1) == "9") %>% rename(MSOA11CD = LSOA11CD))  # include NI's LSOAs
 
 # save
 write_csv(floods_msoa, file.path(data.dir.processed, "MSOAs in flood risk zones.csv"))
